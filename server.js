@@ -20,48 +20,53 @@ async function getAccessToken() {
     body: `client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`
   });
 
-  const data = await gameResponse.json();
+  const data = await response.json();
   cachedToken = data.access_token;
   tokenExpiresAt = now + data.expires_in * 1000;
   return cachedToken;
 }
 
 app.get("/game/:id", async (req, res) => {
-  const gameId = req.params.id;
-  const token = await getAccessToken();
+  try {
+    const gameId = req.params.id;
+    const token = await getAccessToken();
 
-  const gameResponse = await fetch("https://api.igdb.com/v4/games", {
-    method: "POST",
-    headers: {
-      "Client-ID": process.env.TWITCH_CLIENT_ID,
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "text/plain"
-    },
-    body: `fields name, summary, first_release_date, category, age_ratings.rating, cover.url, artworks.url, platforms.name, 
-    involved_companies.company.name, involved_companies.developer, involved_companies.publisher; where id = ${gameId};`
-  });
+    const gameResponse = await fetch("https://api.igdb.com/v4/games", {
+      method: "POST",
+      headers: {
+        "Client-ID": process.env.TWITCH_CLIENT_ID,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "text/plain"
+      },
+      body: `fields name, summary, first_release_date, category, age_ratings.rating, cover.url, artworks.url, platforms.name, 
+      involved_companies.company.name, involved_companies.developer, involved_companies.publisher; where id = ${gameId};`
+    });
 
-  const data = await response.json();
+    const gameData = await gameResponse.json(); // Corrigido: usando gameResponse
 
-  if (!gameData[0]) {
-    return res.status(404).json({ error: "Game not found" });
+    if (!gameData[0]) {
+      return res.status(404).json({ error: "Game not found" });
+    }
+
+    const game = gameData[0];
+    const result = {
+      id: game.id,
+      name: game.name,
+      summary: game.summary,
+      releaseDate: game.first_release_date ? new Date(game.first_release_date * 1000).toLocaleDateString() : 'Desconhecido',
+      cover: game.cover ? { url: game.cover.url } : null,
+      artworks: game.artworks ? game.artworks.map(art => ({ url: art.url })) : [],
+      platforms: game.platforms ? game.platforms.map(p => p.name) : [],
+      ageRating: game.age_ratings ? getAgeRating(game.age_ratings[0].rating) : 'Desconhecido',
+      genres: game.genres || [],
+      companies: processCompanies(game.involved_companies)
+    };
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error fetching game data:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
-
-  const game = gameData[0];
-  const result = {
-    id: game.id,
-    name: game.name,
-    summary: game.summary,
-    releaseDate: game.first_release_date ? new Date(game.first_release_date * 1000).toLocaleDateString() : 'Desconhecido',
-    cover: game.cover ? { url: game.cover.url } : null,
-    artworks: game.artworks ? game.artworks.map(art => ({ url: art.url })) : [],
-    platforms: game.platforms ? game.platforms.map(p => p.name) : [],
-    ageRating: game.age_ratings ? getAgeRating(game.age_ratings[0].rating) : 'Desconhecido',
-    genres: game.genres || [],
-    companies: processCompanies(game.involved_companies)
-  };
-
-  res.json(result);
 });
 
 function processCompanies(companies) {
