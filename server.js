@@ -20,7 +20,7 @@ async function getAccessToken() {
     body: `client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`
   });
 
-  const data = await response.json();
+  const data = await gameResponse.json();
   cachedToken = data.access_token;
   tokenExpiresAt = now + data.expires_in * 1000;
   return cachedToken;
