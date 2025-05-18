@@ -27,22 +27,77 @@ async function getAccessToken() {
 }
 
 app.get("/game/:id", async (req, res) => {
-  const gameId = req.params.id || 1942;
+  const gameId = req.params.id;
   const token = await getAccessToken();
 
-  const response = await fetch("https://api.igdb.com/v4/games", {
+  const gameResponse = await fetch("https://api.igdb.com/v4/games", {
     method: "POST",
     headers: {
       "Client-ID": process.env.TWITCH_CLIENT_ID,
       "Authorization": `Bearer ${token}`,
       "Content-Type": "text/plain"
     },
-    body: `fields name, summary, cover.url; where id = ${gameId};`
+    body: `fields name, summary, first_release_date, category, age_ratings.rating, cover.url, artworks.url, platforms.name, 
+    involved_companies.company.name, involved_companies.developer, involved_companies.publisher; where id = ${gameId};`
   });
 
   const data = await response.json();
-  res.json(data[0]);
+
+  if (!gameData[0]) {
+    return res.status(404).json({ error: "Game not found" });
+  }
+
+  const game = gameData[0];
+  const result = {
+    id: game.id,
+    name: game.name,
+    summary: game.summary,
+    releaseDate: game.first_release_date ? new Date(game.first_release_date * 1000).toLocaleDateString() : 'Desconhecido',
+    cover: game.cover ? { url: game.cover.url } : null,
+    artworks: game.artworks ? game.artworks.map(art => ({ url: art.url })) : [],
+    platforms: game.platforms ? game.platforms.map(p => p.name) : [],
+    ageRating: game.age_ratings ? getAgeRating(game.age_ratings[0].rating) : 'Desconhecido',
+    genres: game.genres || [],
+    companies: processCompanies(game.involved_companies)
+  };
+
+  res.json(result);
 });
+
+function processCompanies(companies) {
+  if (!companies) return { developers: [], publishers: [] };
+  
+  const developers = companies
+    .filter(c => c.developer)
+    .map(c => c.company.name);
+  
+  const publishers = companies
+    .filter(c => c.publisher)
+    .map(c => c.company.name);
+  
+  return {
+    developers: [...new Set(developers)],
+    publishers: [...new Set(publishers)]
+  };
+}
+
+function getAgeRating(rating) {
+  const ratings = {
+    1: 'PEGI 3',
+    2: 'PEGI 7',
+    3: 'PEGI 12',
+    4: 'PEGI 16',
+    5: 'PEGI 18',
+    6: 'RP (Classificação Pendente)',
+    7: 'EC (Primeira Infância)',
+    8: 'E (Todos)',
+    9: 'E10+ (Todos +10)',
+    10: 'T (Adolescentes)',
+    11: 'M (Maduro 17+)',
+    12: 'AO (Apenas Adultos)'
+  };
+  return ratings[rating] || 'Desconhecido';
+}
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
