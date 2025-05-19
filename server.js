@@ -42,7 +42,7 @@ app.get("/game/:id", async (req, res) => {
       involved_companies.company.name, involved_companies.developer, involved_companies.publisher; where id = ${gameId};`
     });
 
-    const gameData = await gameResponse.json(); // Corrigido: usando gameResponse
+    const gameData = await gameResponse.json(); 
 
     if (!gameData[0]) {
       return res.status(404).json({ error: "Game not found" });
@@ -65,6 +65,66 @@ app.get("/game/:id", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching game data:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/popular", async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    
+    const response = await fetch("https://api.igdb.com/v4/games", {
+      method: "POST",
+      headers: {
+        "Client-ID": process.env.TWITCH_CLIENT_ID,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "text/plain"
+      },
+      body: `fields name, cover.url; 
+             where total_rating_count > 50 & cover != null; 
+             sort total_rating_count desc; 
+             limit 50;`
+    });
+
+    const data = await response.json();
+    res.json(data.map(game => ({
+      id: game.id,
+      name: game.name,
+      cover: game.cover ? { url: game.cover.url } : null
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Endpoint para jogos por gênero
+app.get("/genre/:id", async (req, res) => {
+  try {
+    const genreId = req.params.id;
+    const token = await getAccessToken();
+    
+    const response = await fetch("https://api.igdb.com/v4/games", {
+      method: "POST",
+      headers: {
+        "Client-ID": process.env.TWITCH_CLIENT_ID,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "text/plain"
+      },
+      body: `fields name, cover.url; 
+             where genres = (${genreId}) & cover != null; 
+             sort total_rating_count desc; 
+             limit 50;`
+    });
+
+    const data = await response.json();
+    res.json(data.map(game => ({
+      id: game.id,
+      name: game.name,
+      cover: game.cover ? { url: game.cover.url } : null
+    })));
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
