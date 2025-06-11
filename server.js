@@ -38,8 +38,10 @@ app.get("/game/:id", async (req, res) => {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "text/plain"
       },
-      body: `fields name, summary, first_release_date, category, age_ratings.rating, cover.url, artworks.url, platforms.name, 
-      involved_companies.company.name, involved_companies.developer, involved_companies.publisher; where id = ${gameId};`
+      body: `fields name, summary, first_release_date, category, age_ratings.rating, 
+             cover.url, artworks.url, screenshots.url, platforms.name, 
+             involved_companies.company.name, involved_companies.developer, 
+             involved_companies.publisher; where id = ${gameId};`
     });
 
     const gameData = await gameResponse.json(); 
@@ -47,6 +49,7 @@ app.get("/game/:id", async (req, res) => {
     if (!gameData[0]) {
       return res.status(404).json({ error: "Game not found" });
     }
+
 
     const game = gameData[0];
     const result = {
@@ -56,6 +59,7 @@ app.get("/game/:id", async (req, res) => {
       releaseDate: game.first_release_date ? new Date(game.first_release_date * 1000).toLocaleDateString() : 'Desconhecido',
       cover: game.cover ? { url: game.cover.url } : null,
       artworks: game.artworks ? game.artworks.map(art => ({ url: art.url })) : [],
+      screenshots: game.screenshots ? game.screenshots.map(ss => ({ url: ss.url })) : [],
       platforms: game.platforms ? game.platforms.map(p => p.name) : [],
       ageRating: game.age_ratings ? getAgeRating(game.age_ratings[0].rating) : 'Desconhecido',
       genres: game.genres || [],
@@ -80,8 +84,8 @@ app.get("/popular", async (req, res) => {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "text/plain"
       },
-      body: `fields name, cover.url; 
-             where total_rating_count > 50 & cover != null; 
+      body: `fields name, cover.url, screenshots.url; 
+             where total_rating_count > 50 & (cover != null | screenshots != null); 
              sort total_rating_count desc; 
              limit 50;`
     });
@@ -90,7 +94,8 @@ app.get("/popular", async (req, res) => {
     res.json(data.map(game => ({
       id: game.id,
       name: game.name,
-      cover: game.cover ? { url: game.cover.url } : null
+      cover: game.cover ? { url: game.cover.url } : null,
+      screenshots: game.screenshots ? game.screenshots.map(ss => ({ url: ss.url })) : []
     })));
   } catch (err) {
     console.error(err);
@@ -125,105 +130,6 @@ app.get("/genre/:id", async (req, res) => {
     })));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-app.get("/game-images/:id", async (req, res) => {
-  try {
-    const gameId = req.params.id;
-    const token = await getAccessToken();
-
-    // Busca artworks, screenshots e cover com mais detalhes
-    const response = await fetch("https://api.igdb.com/v4/games", {
-      method: "POST",
-      headers: {
-        "Client-ID": process.env.TWITCH_CLIENT_ID,
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "text/plain"
-      },
-      body: `fields name, artworks.*, screenshots.*, cover.url, cover.height, cover.width;
-             where id = ${gameId};`
-    });
-
-    const gameData = await response.json();
-    
-    if (!gameData[0]) {
-      return res.status(404).json({ error: "Game not found" });
-    }
-
-    const game = gameData[0];
-    
-    const isBannerLike = (img) => {
-      if (img.width && img.height) {
-        return img.width / img.height >= 1.8;
-      }
-      if (img.url) {
-        return img.url.includes('keyart') || img.url.includes('banner') || 
-               img.url.includes('screenshot') || img.url.includes('wallpaper');
-      }
-      return false;
-    };
-
-    const filteredArtworks = (game.artworks || []).filter(art => {
-      return art.type === 17 || // Keyarts
-             (art.url && !art.url.includes('logo') && !art.url.includes('concept') && isBannerLike(art));
-    });
-
-    const filteredScreenshots = (game.screenshots || []).filter(sh => {
-      return sh.url && !sh.url.includes('thumb') && !sh.url.includes('concept');
-    });
-
-    const isCoverValid = game.cover && 
-                         game.cover.url && 
-                         !game.cover.url.includes('logo') && 
-                         isBannerLike(game.cover);
-
-    let bestImage = null;
-    
-    const keyart = filteredArtworks.find(a => a.type === 17);
-    if (keyart) {
-      bestImage = {
-        type: 'keyart',
-        url: keyart.url
-      };
-    }
-    
-    if (!bestImage && filteredArtworks.length > 0) {
-      bestImage = {
-        type: 'artwork',
-        url: filteredArtworks[0].url
-      };
-    }
-    
-    if (!bestImage && filteredScreenshots.length > 0) {
-      bestImage = {
-        type: 'screenshot',
-        url: filteredScreenshots[0].url
-      };
-    }
-    
-    if (!bestImage && isCoverValid) {
-      bestImage = {
-        type: 'cover',
-        url: game.cover.url
-      };
-    }
-    
-    if (!bestImage) {
-      bestImage = {
-        type: 'default',
-        url: '//images.igdb.com/igdb/image/upload/t_thumb/nocover_qhhlj6.jpg'
-      };
-    }
-
-    res.json({
-      id: game.id,
-      name: game.name,
-      image: bestImage
-    });
-  } catch (error) {
-    console.error("Error fetching game images:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
