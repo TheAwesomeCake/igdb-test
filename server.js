@@ -141,7 +141,7 @@ app.get("/game-images/:id", async (req, res) => {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "text/plain"
       },
-      body: `fields name, artworks.*, screenshots.*, cover.url;
+      body: `fields name, artworks.*, screenshots.*;
              where id = ${gameId};`
     });
 
@@ -153,44 +153,28 @@ app.get("/game-images/:id", async (req, res) => {
 
     const game = gameData[0];
     
+    const filteredArtworks = game.artworks 
+      ? game.artworks.filter(art => art.type === 17) 
+      : [];
+    
+    const screenshots = game.screenshots || [];
+    
     let bestImage = null;
     
-    if (game.artworks && game.artworks.length > 0) {
-      const keyart = game.artworks.find(a => a.image_id && a.type === 17);
-      if (keyart) {
-        bestImage = {
-          type: 'keyart',
-          url: keyart.url
-        };
-      }
-    }
-    
-    if (!bestImage && game.artworks && game.artworks.length > 0) {
+    if (filteredArtworks.length > 0) {
       bestImage = {
-        type: 'artwork',
-        url: game.artworks[0].url
+        type: 'keyart',
+        url: filteredArtworks[0].url
       };
-    }
-    
-    if (!bestImage && game.screenshots && game.screenshots.length > 0) {
+    } 
+    else if (screenshots.length > 0) {
       bestImage = {
         type: 'screenshot',
-        url: game.screenshots[0].url
+        url: screenshots[0].url
       };
     }
-    
-    if (!bestImage && game.cover) {
-      bestImage = {
-        type: 'cover',
-        url: game.cover.url
-      };
-    }
-    
-    if (!bestImage) {
-      bestImage = {
-        type: 'default',
-        url: '//images.igdb.com/igdb/image/upload/t_thumb/nocover_qhhlj6.jpg'
-      };
+    else {
+      bestImage = null;
     }
 
     res.json({
