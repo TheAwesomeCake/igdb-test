@@ -134,6 +134,7 @@ app.get("/game-images/:id", async (req, res) => {
     const gameId = req.params.id;
     const token = await getAccessToken();
 
+    // Busca artworks, screenshots e cover com mais detalhes
     const response = await fetch("https://api.igdb.com/v4/games", {
       method: "POST",
       headers: {
@@ -141,7 +142,7 @@ app.get("/game-images/:id", async (req, res) => {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "text/plain"
       },
-      body: `fields name, artworks.*, screenshots.*;
+      body: `fields name, artworks.*, screenshots.*, cover.url, cover.height, cover.width;
              where id = ${gameId};`
     });
 
@@ -153,28 +154,67 @@ app.get("/game-images/:id", async (req, res) => {
 
     const game = gameData[0];
     
-    const filteredArtworks = game.artworks 
-      ? game.artworks.filter(art => art.type === 17) 
-      : [];
-    
-    const screenshots = game.screenshots || [];
-    
+    const isBannerLike = (img) => {
+      if (img.width && img.height) {
+        return img.width / img.height >= 1.8;
+      }
+      if (img.url) {
+        return img.url.includes('keyart') || img.url.includes('banner') || 
+               img.url.includes('screenshot') || img.url.includes('wallpaper');
+      }
+      return false;
+    };
+
+    const filteredArtworks = (game.artworks || []).filter(art => {
+      return art.type === 17 || // Keyarts
+             (art.url && !art.url.includes('logo') && !art.url.includes('concept') && isBannerLike(art));
+    });
+
+    const filteredScreenshots = (game.screenshots || []).filter(sh => {
+      return sh.url && !sh.url.includes('thumb') && !sh.url.includes('concept');
+    });
+
+    const isCoverValid = game.cover && 
+                         game.cover.url && 
+                         !game.cover.url.includes('logo') && 
+                         isBannerLike(game.cover);
+
     let bestImage = null;
     
-    if (filteredArtworks.length > 0) {
+    const keyart = filteredArtworks.find(a => a.type === 17);
+    if (keyart) {
       bestImage = {
         type: 'keyart',
-        url: filteredArtworks[0].url
-      };
-    } 
-    else if (screenshots.length > 0) {
-      bestImage = {
-        type: 'screenshot',
-        url: screenshots[0].url
+        url: keyart.url
       };
     }
-    else {
-      bestImage = null;
+    
+    if (!bestImage && filteredArtworks.length > 0) {
+      bestImage = {
+        type: 'artwork',
+        url: filteredArtworks[0].url
+      };
+    }
+    
+    if (!bestImage && filteredScreenshots.length > 0) {
+      bestImage = {
+        type: 'screenshot',
+        url: filteredScreenshots[0].url
+      };
+    }
+    
+    if (!bestImage && isCoverValid) {
+      bestImage = {
+        type: 'cover',
+        url: game.cover.url
+      };
+    }
+    
+    if (!bestImage) {
+      bestImage = {
+        type: 'default',
+        url: '//images.igdb.com/igdb/image/upload/t_thumb/nocover_qhhlj6.jpg'
+      };
     }
 
     res.json({
