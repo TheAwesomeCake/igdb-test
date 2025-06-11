@@ -129,6 +129,81 @@ app.get("/genre/:id", async (req, res) => {
   }
 });
 
+app.get("/game-images/:id", async (req, res) => {
+  try {
+    const gameId = req.params.id;
+    const token = await getAccessToken();
+
+    const response = await fetch("https://api.igdb.com/v4/games", {
+      method: "POST",
+      headers: {
+        "Client-ID": process.env.TWITCH_CLIENT_ID,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "text/plain"
+      },
+      body: `fields name, artworks.*, screenshots.*, cover.url;
+             where id = ${gameId};`
+    });
+
+    const gameData = await response.json();
+    
+    if (!gameData[0]) {
+      return res.status(404).json({ error: "Game not found" });
+    }
+
+    const game = gameData[0];
+    
+    let bestImage = null;
+    
+    if (game.artworks && game.artworks.length > 0) {
+      const keyart = game.artworks.find(a => a.image_id && a.type === 17);
+      if (keyart) {
+        bestImage = {
+          type: 'keyart',
+          url: keyart.url
+        };
+      }
+    }
+    
+    if (!bestImage && game.artworks && game.artworks.length > 0) {
+      bestImage = {
+        type: 'artwork',
+        url: game.artworks[0].url
+      };
+    }
+    
+    if (!bestImage && game.screenshots && game.screenshots.length > 0) {
+      bestImage = {
+        type: 'screenshot',
+        url: game.screenshots[0].url
+      };
+    }
+    
+    if (!bestImage && game.cover) {
+      bestImage = {
+        type: 'cover',
+        url: game.cover.url
+      };
+    }
+    
+    if (!bestImage) {
+      bestImage = {
+        type: 'default',
+        url: '//images.igdb.com/igdb/image/upload/t_thumb/nocover_qhhlj6.jpg'
+      };
+    }
+
+    res.json({
+      id: game.id,
+      name: game.name,
+      image: bestImage
+    });
+  } catch (error) {
+    console.error("Error fetching game images:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 function processCompanies(companies) {
   if (!companies) return { developers: [], publishers: [] };
   
