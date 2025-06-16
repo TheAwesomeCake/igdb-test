@@ -264,3 +264,32 @@ function getAgeRating(rating) {
 }
 
 module.exports = app;
+
+// Adicione este novo endpoint
+app.get("/", (req, res) => {
+  res.json({
+    message: "IGDB API está funcionando!",
+    endpoints: {
+      game: "/game/:id",
+      popular: "/popular",
+      genre: "/genre/:id"
+    }
+  });
+});
+
+// Modifique a exportação para o Vercel
+module.exports = (req, res) => {
+  // Habilita CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  
+  // Encaminha a requisição para o app Express
+  app(req, res);
+};
+
+// Mantenha o código para desenvolvimento local
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando em http://localhost:${PORT}`);
+  });
+}
