@@ -26,6 +26,54 @@ async function getAccessToken() {
   return cachedToken;
 }
 
+function processCompanies(companies) {
+  if (!companies) return { developers: [], publishers: [] };
+  
+  const developers = companies
+    .filter(c => c.developer)
+    .map(c => c.company.name);
+  
+  const publishers = companies
+    .filter(c => c.publisher)
+    .map(c => c.company.name);
+  
+  return {
+    developers: [...new Set(developers)],
+    publishers: [...new Set(publishers)]
+  };
+}
+
+function getAgeRating(rating) {
+  const ratings = {
+    1: 'PEGI 3',
+    2: 'PEGI 7',
+    3: 'PEGI 12',
+    4: 'PEGI 16',
+    5: 'PEGI 18',
+    6: 'RP (Classificação Pendente)',
+    7: 'EC (Primeira Infância)',
+    8: 'E (Todos)',
+    9: 'E10+ (Todos +10)',
+    10: 'T (Adolescentes)',
+    11: 'M (Maduro 17+)',
+    12: 'AO (Apenas Adultos)'
+  };
+  return ratings[rating] || 'Desconhecido';
+}
+
+// Endpoint raiz
+app.get("/", (req, res) => {
+  res.json({
+    message: "IGDB API está funcionando!",
+    endpoints: {
+      game: "/game/:id",
+      popular: "/popular",
+      genre: "/genre/:id"
+    }
+  });
+});
+
+// Endpoint para detalhes do jogo
 app.get("/game/:id", async (req, res) => {
   try {
     const gameId = req.params.id;
@@ -50,7 +98,6 @@ app.get("/game/:id", async (req, res) => {
       return res.status(404).json({ error: "Game not found" });
     }
 
-
     const game = gameData[0];
     const result = {
       id: game.id,
@@ -73,6 +120,7 @@ app.get("/game/:id", async (req, res) => {
   }
 });
 
+// Endpoint para jogos populares
 app.get("/popular", async (req, res) => {
   try {
     const token = await getAccessToken();
@@ -134,66 +182,10 @@ app.get("/genre/:id", async (req, res) => {
   }
 });
 
-function processCompanies(companies) {
-  if (!companies) return { developers: [], publishers: [] };
-  
-  const developers = companies
-    .filter(c => c.developer)
-    .map(c => c.company.name);
-  
-  const publishers = companies
-    .filter(c => c.publisher)
-    .map(c => c.company.name);
-  
-  return {
-    developers: [...new Set(developers)],
-    publishers: [...new Set(publishers)]
-  };
-}
-
-function getAgeRating(rating) {
-  const ratings = {
-    1: 'PEGI 3',
-    2: 'PEGI 7',
-    3: 'PEGI 12',
-    4: 'PEGI 16',
-    5: 'PEGI 18',
-    6: 'RP (Classificação Pendente)',
-    7: 'EC (Primeira Infância)',
-    8: 'E (Todos)',
-    9: 'E10+ (Todos +10)',
-    10: 'T (Adolescentes)',
-    11: 'M (Maduro 17+)',
-    12: 'AO (Apenas Adultos)'
-  };
-  return ratings[rating] || 'Desconhecido';
-}
-
+// Exportação para o Vercel
 module.exports = app;
 
-// Adicione este novo endpoint
-app.get("/", (req, res) => {
-  res.json({
-    message: "IGDB API está funcionando!",
-    endpoints: {
-      game: "/game/:id",
-      popular: "/popular",
-      genre: "/genre/:id"
-    }
-  });
-});
-
-// Modifique a exportação para o Vercel
-module.exports = (req, res) => {
-  // Habilita CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
-  
-  // Encaminha a requisição para o app Express
-  app(req, res);
-};
-
-// Mantenha o código para desenvolvimento local
+// Código para desenvolvimento local
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);
