@@ -1,11 +1,7 @@
-const express = require("express");
-const fetch = require("node-fetch");
-const cors = require("cors");
-require("dotenv").config();
-
-const app = express();
-app.use(cors());
-const PORT = process.env.PORT || 3000;
+const { createServer } = require('http');
+const { parse } = require('url');
+const fetch = require('node-fetch');
+require('dotenv').config();
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -61,22 +57,10 @@ function getAgeRating(rating) {
   return ratings[rating] || 'Desconhecido';
 }
 
-// Endpoint raiz
-app.get("/", (req, res) => {
-  res.json({
-    message: "IGDB API está funcionando!",
-    endpoints: {
-      game: "/game/:id",
-      popular: "/popular",
-      genre: "/genre/:id"
-    }
-  });
-});
-
-// Endpoint para detalhes do jogo
-app.get("/game/:id", async (req, res) => {
+async function handleGameRequest(req, res) {
   try {
-    const gameId = req.params.id;
+    const { pathname } = parse(req.url, true);
+    const gameId = pathname.split('/')[2];
     const token = await getAccessToken();
 
     const gameResponse = await fetch("https://api.igdb.com/v4/games", {
@@ -92,10 +76,11 @@ app.get("/game/:id", async (req, res) => {
              involved_companies.publisher; where id = ${gameId};`
     });
 
-    const gameData = await gameResponse.json(); 
+    const gameData = await gameResponse.json();
 
     if (!gameData[0]) {
-      return res.status(404).json({ error: "Game not found" });
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: "Game not found" }));
     }
 
     const game = gameData[0];
@@ -113,15 +98,19 @@ app.get("/game/:id", async (req, res) => {
       companies: processCompanies(game.involved_companies)
     };
 
-    res.json(result);
+    res.writeHead(200, { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify(result));
   } catch (error) {
     console.error("Error fetching game data:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: "Internal server error" }));
   }
-});
+}
 
-// Endpoint para jogos populares
-app.get("/popular", async (req, res) => {
+async function handlePopularRequest(req, res) {
   try {
     const token = await getAccessToken();
     
@@ -139,22 +128,28 @@ app.get("/popular", async (req, res) => {
     });
 
     const data = await response.json();
-    res.json(data.map(game => ({
+    
+    res.writeHead(200, { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify(data.map(game => ({
       id: game.id,
       name: game.name,
       cover: game.cover ? { url: game.cover.url } : null,
       screenshots: game.screenshots ? game.screenshots.map(ss => ({ url: ss.url })) : []
-    })));
+    }))));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: "Internal server error" }));
   }
-});
+}
 
-// Endpoint para jogos por gênero
-app.get("/genre/:id", async (req, res) => {
+async function handleGenreRequest(req, res) {
   try {
-    const genreId = req.params.id;
+    const { pathname } = parse(req.url, true);
+    const genreId = pathname.split('/')[2];
     const token = await getAccessToken();
     
     const response = await fetch("https://api.igdb.com/v4/games", {
@@ -171,23 +166,54 @@ app.get("/genre/:id", async (req, res) => {
     });
 
     const data = await response.json();
-    res.json(data.map(game => ({
+    
+    res.writeHead(200, { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify(data.map(game => ({
       id: game.id,
       name: game.name,
       cover: game.cover ? { url: game.cover.url } : null
-    })));
+    }))));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: "Internal server error" }));
   }
-});
-
-// Exportação para o Vercel
-module.exports = app;
-
-// Código para desenvolvimento local
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
-  });
 }
+
+function handleRootRequest(req, res) {
+  res.writeHead(200, { 
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+  });
+  res.end(JSON.stringify({
+    message: "IGDB API está funcionando!",
+    endpoints: {
+      game: "/game/:id",
+      popular: "/popular",
+      genre: "/genre/:id"
+    }
+  }));
+}
+
+module.exports = async (req, res) => {
+  const { pathname } = parse(req.url, true);
+
+  switch (pathname) {
+    case '/':
+      return handleRootRequest(req, res);
+    case '/popular':
+      return handlePopularRequest(req, res);
+    default:
+      if (pathname.startsWith('/game/')) {
+        return handleGameRequest(req, res);
+      } else if (pathname.startsWith('/genre/')) {
+        return handleGenreRequest(req, res);
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "Endpoint not found" }));
+      }
+  }
+};
