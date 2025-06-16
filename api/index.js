@@ -169,4 +169,6 @@ function getAgeRating(rating) {
   return ratings[rating] || 'Desconhecido';
 }
 
-module.exports = app;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+});
