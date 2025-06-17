@@ -134,6 +134,47 @@ app.get("/genre/:id", async (req, res) => {
   }
 });
 
+// Endpoint para buscar jogos por nome
+app.get("/search", async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query || query.length < 3) {
+      return res.status(400).json({ error: "Query must be at least 3 characters long" });
+    }
+
+    const token = await getAccessToken();
+    
+    const response = await fetch("https://api.igdb.com/v4/games", {
+      method: "POST",
+      headers: {
+        "Client-ID": process.env.TWITCH_CLIENT_ID,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "text/plain"
+      },
+      body: `fields id, name, cover.url, first_release_date, platforms.name;
+             search "${query}";
+             where cover != null;
+             limit 20;`
+    });
+
+    const data = await response.json();
+    res.json(data.map(game => ({
+      id: game.id,
+      name: game.name,
+      cover: game.cover ? { 
+        url: game.cover.url.replace('t_thumb', 't_cover_big') 
+      } : null,
+      releaseDate: game.first_release_date ? 
+        new Date(game.first_release_date * 1000).toLocaleDateString() : 
+        'Desconhecido',
+      platforms: game.platforms ? game.platforms.map(p => p.name) : []
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 function processCompanies(companies) {
   if (!companies) return { developers: [], publishers: [] };
   
