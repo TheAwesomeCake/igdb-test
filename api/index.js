@@ -1,9 +1,9 @@
 const express = require("express");
-const fetch = require("node-fetch");
-const cors = require("cors");
+const fetch   = require("node-fetch");
+const cors    = require("cors");
 require("dotenv").config();
 
-const app = express();
+const app  = express();
 app.use(cors());
 const PORT = process.env.PORT || 3000;
 
@@ -169,6 +169,10 @@ function getAgeRating(rating) {
   return ratings[rating] || 'Desconhecido';
 }
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+module.exports = app;
+
+if (!process.env.VERCEL) {          // só roda fora da Vercel
+  app.listen(PORT, () =>
+    console.log(`Servidor local em http://localhost:${PORT}`)
+  );
+}
